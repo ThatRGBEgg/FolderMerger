@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>GTA V Web Build Merger & Unpacker</title>
+  
+  <!-- iOS PWA Meta Tags -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="GTA Merger">
+  <meta name="theme-color" content="#09090b">
+  
+  <!-- Apple Touch Icon (Dynamic SVG Data URL) -->
+  <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%23000'/><text x='50%' y='55%' font-size='50' text-anchor='middle' dominant-baseline='middle' fill='%23fbbf24'>⚡</text></svg>">
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            iosBg: '#000000',
+            iosCard: 'rgba(28, 28, 30, 0.75)',
+            iosBorder: 'rgba(255, 255, 255, 0.12)',
+            iosAccent: '#0A84FF',
+            iosSuccess: '#30D158',
+            iosWarning: '#FFD60A',
+            iosDanger: '#FF453A'
+          },
+          fontFamily: {
+            sans: ['-apple-system', 'BlinkMacSystemFont', 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', 'Helvetica', 'Arial', 'sans-serif']
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Phosphor Icons -->
+  <script src="https://unpkg.com/@phosphor-icons/web"></script>
+
+  <!-- Zip.js Stream-Capable Zip Library -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/zip.js/2.7.34/zip.min.js"></script>
+
+  <style>
+    /* Custom iOS Glassmorphism Effects & Touch Optimizations */
+    body {
+      -webkit-tap-highlight-color: transparent;
+      -webkit-touch-callout: none;
+      user-select: none;
+      background-color: #000000;
+      color: #f4f4f5;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", sans-serif;
+      padding-top: env(safe-area-inset-top);
+      padding-bottom: env(safe-area-inset-bottom);
+      padding-left: env(safe-area-inset-left);
+      padding-right: env(safe-area-inset-right);
+    }
+
+    .glass-card {
+      background: rgba(28, 28, 30, 0.75);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+    }
+
+    .glass-button {
+      background: rgba(255, 255, 255, 0.08);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      transition: all 0.2s ease;
+    }
+
+    .glass-button:active {
+      transform: scale(0.97);
+      background: rgba(255, 255, 255, 0.18);
+    }
+
+    .ios-scroll::-webkit-scrollbar {
+      width: 4px;
+      height: 4px;
+    }
+    .ios-scroll::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 9999px;
+    }
+
+    @keyframes pulseGlow {
+      0%, 100% { opacity: 0.4; }
+      50% { opacity: 0.8; }
+    }
+
+    .pulse-bg {
+      animation: pulseGlow 3s infinite ease-in-out;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between overflow-x-hidden antialiased">
+
+  <!-- iOS Background Ambient Glows -->
+  <div class="fixed inset-0 pointer-events-none overflow-hidden -z-10">
+    <div class="absolute -top-32 -left-32 w-80 h-80 bg-blue-600/20 rounded-full blur-3xl pulse-bg"></div>
+    <div class="absolute top-1/2 -right-32 w-80 h-80 bg-purple-600/20 rounded-full blur-3xl pulse-bg" style="animation-delay: 1.5s;"></div>
+  </div>
+
+  <div class="w-full max-w-3xl mx-auto px-4 py-6 flex-1 flex flex-col space-y-5">
+    
+    <!-- iOS Top Navigation Header -->
+    <header class="flex items-center justify-between py-2 border-b border-white/10">
+      <div class="flex items-center space-x-3">
+        <div class="w-10 h-10 rounded-2xl bg-gradient-to-tr from-amber-500 to-yellow-300 flex items-center justify-center shadow-lg shadow-amber-500/20 text-black font-extrabold text-xl">
+          ⚡
+        </div>
+        <div>
+          <h1 class="text-xl font-bold tracking-tight text-white flex items-center gap-1.5">
+            GTA V Build Merger
+          </h1>
+          <p class="text-xs text-zinc-400">iOS Web App • Non-destructive Multi-part Merger</p>
+        </div>
+      </div>
+      
+      <!-- iOS Share / Add To Home Tip Button -->
+      <button onclick="togglePWAInstructions()" class="p-2.5 rounded-full glass-button text-zinc-300 hover:text-white" title="Add to Home Screen Info">
+        <i class="ph-bold ph-export text-lg"></i>
+      </button>
+    </header>
+
+    <!-- PWA Installation Banner (Conditional) -->
+    <div id="pwaBanner" class="hidden glass-card rounded-2xl p-4 relative overflow-hidden border-amber-500/30">
+      <div class="flex items-start space-x-3">
+        <div class="p-2 rounded-xl bg-amber-500/20 text-amber-400">
+          <i class="ph-bold ph-device-mobile text-xl"></i>
+        </div>
+        <div class="flex-1 text-sm text-zinc-300">
+          <p class="font-semibold text-white mb-1">Install on iPhone Home Screen</p>
+          <p class="text-xs text-zinc-400 leading-relaxed">
+            Tap the <span class="text-white font-medium inline-flex items-center gap-1"><i class="ph-bold ph-export"></i> Share</span> button in Safari, then select <span class="text-amber-400 font-medium">"Add to Home Screen"</span> for fullscreen performance & offline access.
+          </p>
+        </div>
+        <button onclick="togglePWAInstructions()" class="text-zinc-500 hover:text-white text-lg">
+          <i class="ph-bold ph-x"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- Main Dropzone / Selection Area -->
+    <div class="glass-card rounded-3xl p-6 text-center border-dashed border-2 border-zinc-700 hover:border-iosAccent transition-all relative overflow-hidden group">
+      
+      <input type="file" id="fileInput" multiple accept=".zip,.001,.002,.003" class="hidden" onchange="handleFileSelect(event)">
+      <input type="file" id="folderInput" webkitdirectory directory multiple class="hidden" onchange="handleFileSelect(event)">
+
+      <div class="py-6 flex flex-col items-center justify-center space-y-4">
+        <div class="w-16 h-16 rounded-full bg-blue-500/10 border border-blue-500/30 flex items-center justify-center text-iosAccent group-hover:scale-110 transition-transform duration-300">
+          <i class="ph-duotone ph-folder-archive text-3xl"></i>
+        </div>
+
+        <div>
+          <h2 class="text-lg font-semibold text-white">Select GTA V Archive Parts</h2>
+          <p class="text-xs text-zinc-400 max-w-sm mx-auto mt-1">
+            Choose all parts (<code class="text-amber-400">playgta5-part-01.zip</code> to <code class="text-amber-400">part-14.zip</code>) or the parent folder containing them.
+          </p>
+        </div>
+
+        <!-- File Select Action Buttons -->
+        <div class="flex flex-wrap items-center justify-center gap-3 pt-2">
+          <button onclick="document.getElementById('fileInput').click()" class="glass-button px-5 py-2.5 rounded-full text-sm font-medium text-white flex items-center space-x-2 border-blue-500/30 hover:bg-blue-600/20 active:bg-blue-600/30">
+            <i class="ph-bold ph-files text-iosAccent"></i>
+            <span>Select ZIP Files</span>
+          </button>
+
+          <button onclick="document.getElementById('folderInput').click()" class="glass-button px-5 py-2.5 rounded-full text-sm font-medium text-zinc-300 flex items-center space-x-2 border-zinc-700 hover:bg-zinc-800">
+            <i class="ph-bold ph-folder-open text-amber-400"></i>
+            <span>Select Folder</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Selected Files List & Controls -->
+    <div id="fileListCard" class="glass-card rounded-3xl p-5 hidden space-y-4">
+      <div class="flex items-center justify-between border-b border-white/10 pb-3">
+        <div class="flex items-center space-x-2">
+          <i class="ph-bold ph-list-checks text-iosAccent text-lg"></i>
+          <h3 class="text-sm font-semibold text-white">Loaded Archive Parts (<span id="fileCount">0</span>)</h3>
+        </div>
+        <button onclick="clearFiles()" class="text-xs text-iosDanger hover:underline font-medium flex items-center gap-1">
+          <i class="ph-bold ph-trash"></i> Clear All
+        </button>
+      </div>
+
+      <!-- File Queue List -->
+      <div id="fileQueue" class="max-h-40 overflow-y-auto ios-scroll space-y-2 pr-1">
+        <!-- Rendered File Items -->
+      </div>
+
+      <!-- Action Button -->
+      <div class="pt-2">
+        <button id="processBtn" onclick="startMergingProcess()" class="w-full py-3.5 px-6 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 active:scale-[0.99] text-white font-semibold shadow-lg shadow-blue-600/25 flex items-center justify-center space-x-2 transition-all">
+          <i class="ph-bold ph-play-circle text-xl"></i>
+          <span>Start Unpacking & Recursive Merge</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Live Processing Progress Panel -->
+    <div id="progressCard" class="glass-card rounded-3xl p-5 hidden space-y-4 border-blue-500/30">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center space-x-2">
+          <div class="w-3 h-3 rounded-full bg-iosAccent animate-ping"></div>
+          <h3 id="statusHeading" class="text-sm font-semibold text-white">Processing Archives...</h3>
+        </div>
+        <span id="progressPercentage" class="text-sm font-mono font-bold text-iosAccent">0%</span>
+      </div>
+
+      <!-- iOS Style Progress Bar -->
+      <div class="w-full h-3 bg-zinc-800 rounded-full overflow-hidden p-0.5 border border-white/10">
+        <div id="progressBar" class="h-full bg-gradient-to-r from-blue-500 to-emerald-400 rounded-full transition-all duration-200 w-0"></div>
+      </div>
+
+      <!-- Statistics Grid -->
+      <div class="grid grid-cols-3 gap-2 pt-1 text-center">
+        <div class="bg-black/40 rounded-xl p-2.5 border border-white/5">
+          <p class="text-[10px] text-zinc-400 uppercase tracking-wider font-semibold">Parts Done</p>
+          <p id="statParts" class="text-sm font-bold text-white font-mono mt-0.5">0 / 0</p>
+        </div>
+        <div class="bg-black/40 rounded-xl p-2.5 border border-white/5">
+          <p class="text-[10px] text-zinc-400 uppercase tracking-wider font-semibold">Merged Files</p>
+          <p id="statFiles" class="text-sm font-bold text-iosSuccess font-mono mt-0.5">0</p>
+        </div>
+        <div class="bg-black/40 rounded-xl p-2.5 border border-white/5">
+          <p class="text-[10px] text-zinc-400 uppercase tracking-wider font-semibold">Total Size</p>
+          <p id="statSize" class="text-sm font-bold text-amber-400 font-mono mt-0.5">0 MB</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Terminal Live Log Output -->
+    <div class="glass-card rounded-3xl p-4 flex-1 flex flex-col space-y-2 min-h-[220px]">
+      <div class="flex items-center justify-between pb-2 border-b border-white/10 text-xs">
+        <span class="font-mono text-zinc-400 flex items-center gap-1.5">
+          <i class="ph-bold ph-terminal-window text-iosAccent"></i> Console Output
+        </span>
+        <button onclick="clearConsole()" class="text-zinc-500 hover:text-zinc-300">
+          <i class="ph-bold ph-broom"></i>
+        </button>
+      </div>
+
+      <div id="consoleLog" class="flex-1 font-mono text-xs leading-relaxed overflow-y-auto ios-scroll space-y-1 text-zinc-300 bg-black/50 rounded-2xl p-3 border border-white/5 max-h-56">
+        <div class="text-zinc-500 italic">[System ready. Select GTA V web build part archives to begin.]</div>
+      </div>
+    </div>
+
+    <!-- Export / Download Action Bar (Shown when completed) -->
+    <div id="downloadCard" class="glass-card rounded-3xl p-5 hidden border-emerald-500/30 space-y-3">
+      <div class="flex items-center space-x-3 text-iosSuccess">
+        <i class="ph-fill ph-check-circle text-2xl"></i>
+        <div>
+          <h4 class="text-sm font-bold text-white">Merge Completed Successfully!</h4>
+          <p class="text-xs text-zinc-400">All matching folder structures like mirror/ or b/ have been merged non-destructively.</p>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+        <button onclick="downloadMergedZip()" class="py-3 px-4 rounded-2xl bg-iosSuccess hover:bg-emerald-500 active:scale-[0.98] text-black font-bold text-sm flex items-center justify-center space-x-2 transition-all shadow-lg shadow-emerald-500/20">
+          <i class="ph-bold ph-download-simple text-lg"></i>
+          <span>Download Merged ZIP</span>
+        </button>
+
+        <button id="webShareBtn" onclick="shareMergedZip()" class="py-3 px-4 rounded-2xl glass-button hover:bg-white/10 active:scale-[0.98] text-white font-semibold text-sm flex items-center justify-center space-x-2 transition-all">
+          <i class="ph-bold ph-share-network text-lg text-iosAccent"></i>
+          <span>Export / Share Archive</span>
+        </button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- iOS Footer -->
+  <footer class="text-center py-3 text-[11px] text-zinc-500 border-t border-white/5">
+    GTA V Web Archive Merger • 100% Client-Side In-Memory Stream Logic
+  </footer>
+
+  <!-- Application Logic -->
+  <script>
+    // Config zip.js to use web workers
+    zip.configure({
+      useWebWorkers: true
+    });
+
+    let selectedFiles = [];
+    let mergedVirtualFS = new Map(); // Map<relativePath, Blob/EntryData>
+    let finalMergedBlob = null;
+    let totalMergedBytes = 0;
+
+    // Detect iOS standalone PWA
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+    const isStandalone = window.navigator.standalone || window.matchMedia('(display-mode: standalone)').matches;
+
+    // Initialize UI
+    window.addEventListener('load', () => {
+      log('Application initialized.');
+      if (isIOS && !isStandalone) {
+        document.getElementById('pwaBanner').classList.remove('hidden');
+      }
+      
+      // Register minimal PWA service worker if supported
+      if ('serviceWorker' in navigator) {
+        const swBlob = new Blob([`
+          self.addEventListener('fetch', (e) => e.respondWith(fetch(e.request)));
+        `], { type: 'text/javascript' });
+        navigator.serviceWorker.register(URL.createObjectURL(swBlob)).catch(()=>{});
+      }
+    });
+
+    function togglePWAInstructions() {
+      const banner = document.getElementById('pwaBanner');
+      banner.classList.toggle('hidden');
+    }
+
+    function log(msg, type = 'info') {
+      const consoleLog = document.getElementById('consoleLog');
+      const entry = document.createElement('div');
+      
+      const timestamp = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      
+      let colorClass = 'text-zinc-300';
+      let prefix = 'ℹ️';
+
+      if (type === 'success') { colorClass = 'text-emerald-400'; prefix = '✅'; }
+      if (type === 'warn') { colorClass = 'text-amber-300'; prefix = '⚠️'; }
+      if (type === 'error') { colorClass = 'text-rose-400'; prefix = '❌'; }
+      if (type === 'process') { colorClass = 'text-blue-400'; prefix = '⚡'; }
+
+      entry.className = `${colorClass} flex items-start space-x-1.5`;
+      entry.innerHTML = `<span class="text-zinc-600 select-none">[${timestamp}]</span> <span>${prefix} ${escapeHtml(msg)}</span>`;
+      
+      consoleLog.appendChild(entry);
+      consoleLog.scrollTop = consoleLog.scrollHeight;
+    }
+
+    function clearConsole() {
+      document.getElementById('consoleLog').innerHTML = '<div class="text-zinc-500 italic">[Console cleared.]</div>';
+    }
+
+    function escapeHtml(text) {
+      return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+
+    function handleFileSelect(event) {
+      const files = Array.from(event.target.files);
+      if (files.length === 0) return;
+
+      // Filter for zip or part archives
+      const zipFiles = files.filter(file => 
+        file.name.endsWith('.zip') || 
+        /\.part\d+\.zip$/i.test(file.name) ||
+        /\.\d{3}$/.test(file.name)
+      );
+
+      if (zipFiles.length === 0) {
+        log('No valid .zip or part files were found in selection.', 'warn');
+        return;
+      }
+
+      // Sort files naturally (part-01, part-02, ... part-14)
+      zipFiles.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+
+      selectedFiles = zipFiles;
+      renderFileList();
+      log(`Loaded ${selectedFiles.length} archive part(s) into queue.`, 'success');
+    }
+
+    function renderFileList() {
+      const fileListCard = document.getElementById('fileListCard');
+      const fileQueue = document.getElementById('fileQueue');
+      const fileCount = document.getElementById('fileCount');
+
+      fileQueue.innerHTML = '';
+      fileCount.textContent = selectedFiles.length;
+
+      if (selectedFiles.length > 0) {
+        fileListCard.classList.remove('hidden');
+      } else {
+        fileListCard.classList.add('hidden');
+        return;
+      }
+
+      selectedFiles.forEach((file, idx) => {
+        const item = document.createElement('div');
+        item.className = 'flex items-center justify-between p-2.5 rounded-xl bg-white/5 border border-white/5 text-xs';
+        
+        const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
+
+        item.innerHTML = `
+          <div class="flex items-center space-x-2.5 truncate pr-2">
+            <span class="w-5 h-5 rounded-md bg-blue-500/20 text-iosAccent flex items-center justify-center text-[10px] font-bold font-mono">${idx + 1}</span>
+            <span class="font-medium text-white truncate">${escapeHtml(file.name)}</span>
+          </div>
+          <span class="font-mono text-zinc-400 shrink-0">${sizeMB} MB</span>
+        `;
+
+        fileQueue.appendChild(item);
+      });
+    }
+
+    function clearFiles() {
+      selectedFiles = [];
+      mergedVirtualFS.clear();
+      finalMergedBlob = null;
+      totalMergedBytes = 0;
+
+      document.getElementById('fileListCard').classList.add('hidden');
+      document.getElementById('progressCard').classList.add('hidden');
+      document.getElementById('downloadCard').classList.add('hidden');
+      log('Cleared all files and cache.');
+    }
+
+    async function startMergingProcess() {
+      if (selectedFiles.length === 0) {
+        log('Please select files before starting.', 'warn');
+        return;
+      }
+
+      // Lock UI
+      document.getElementById('processBtn').disabled = true;
+      document.getElementById('processBtn').classList.add('opacity-50', 'cursor-not-allowed');
+      
+      const progressCard = document.getElementById('progressCard');
+      const downloadCard = document.getElementById('downloadCard');
+      progressCard.classList.remove('hidden');
+      downloadCard.classList.add('hidden');
+
+      mergedVirtualFS.clear();
+      totalMergedBytes = 0;
+
+      log(`Beginning recursive extraction & merge of ${selectedFiles.length} archives...`, 'process');
+
+      try {
+        for (let i = 0; i < selectedFiles.length; i++) {
+          const file = selectedFiles[i];
+          updateProgress(i, selectedFiles.length, `Unpacking Part ${i + 1}/${selectedFiles.length}: ${file.name}`);
+          
+          await processSingleZipFile(file, i + 1, selectedFiles.length);
+        }
+
+        updateProgress(selectedFiles.length, selectedFiles.length, 'Constructing Final Merged Zip Archive...');
+        log(`All parts unpacked. Total unique files in merged virtual tree: ${mergedVirtualFS.size}`, 'success');
+
+        // Build the unified output zip archive
+        await createFinalMergedZip();
+
+        document.getElementById('statusHeading').textContent = 'Merge Complete!';
+        log('Unified GTA V web archive ready for deployment/download!', 'success');
+        
+        downloadCard.classList.remove('hidden');
+
+      } catch (err) {
+        log(`Error during processing: ${err.message}`, 'error');
+        console.error(err);
+      } finally {
+        document.getElementById('processBtn').disabled = false;
+        document.getElementById('processBtn').classList.remove('opacity-50', 'cursor-not-allowed');
+      }
+    }
+
+    async function processSingleZipFile(file, index, total) {
+      log(`Opening zip reader for: ${file.name}`);
+      const reader = new zip.ZipReader(new zip.BlobReader(file));
+
+      try {
+        const entries = await reader.getEntries();
+        log(`Part ${index}: Found ${entries.length} items. Merging subfolder structures...`);
+
+        let extractedCount = 0;
+
+        for (const entry of entries) {
+          // Normalize paths to prevent duplication across archives
+          let cleanPath = entry.filename.replace(/\\/g, '/');
+
+          // Skip root folder wrappers if needed, but keep core path matching 'mirror/playgta5.com/data/' or 'b/8b0b5899ed/'
+          if (entry.directory) continue;
+
+          // Non-destructive overwrite check
+          if (!mergedVirtualFS.has(cleanPath)) {
+            // Read data as blob
+            const blobData = await entry.getData(new zip.BlobWriter());
+            mergedVirtualFS.set(cleanPath, blobData);
+            totalMergedBytes += blobData.size;
+            extractedCount++;
+          } else {
+            // File exists: Log non-destructive merge retention
+            log(`Merging duplicate path retained: ${cleanPath}`, 'warn');
+          }
+        }
+
+        log(`Part ${index}/${total} completed. Added ${extractedCount} new files to tree.`);
+        updateStats();
+
+      } finally {
+        await reader.close();
+      }
+    }
+
+    async function createFinalMergedZip() {
+      log('Building consolidated zip archive using stream writer...', 'process');
+      const blobWriter = new zip.BlobWriter("application/zip");
+      const zipWriter = new zip.ZipWriter(blobWriter);
+
+      let written = 0;
+      const totalEntries = mergedVirtualFS.size;
+
+      for (const [path, blob] of mergedVirtualFS.entries()) {
+        await zipWriter.add(path, new zip.BlobReader(blob));
+        written++;
+
+        if (written % 20 === 0 || written === totalEntries) {
+          const pct = Math.round((written / totalEntries) * 100);
+          updateProgress(selectedFiles.length, selectedFiles.length, `Packing output zip: ${written}/${totalEntries} files (${pct}%)`);
+        }
+      }
+
+      finalMergedBlob = await zipWriter.close();
+      const finalMB = (finalMergedBlob.size / (1024 * 1024)).toFixed(2);
+      log(`Final merged ZIP package created! Total size: ${finalMB} MB`, 'success');
+    }
+
+    function updateProgress(currentPart, totalParts, statusText) {
+      const percentage = Math.round((currentPart / totalParts) * 100);
+      document.getElementById('progressBar').style.width = `${percentage}%`;
+      document.getElementById('progressPercentage').textContent = `${percentage}%`;
+      document.getElementById('statusHeading').textContent = statusText;
+      
+      document.getElementById('statParts').textContent = `${currentPart} / ${totalParts}`;
+    }
+
+    function updateStats() {
+      document.getElementById('statFiles').textContent = mergedVirtualFS.size.toLocaleString();
+      const mb = (totalMergedBytes / (1024 * 1024)).toFixed(1);
+      document.getElementById('statSize').textContent = `${mb} MB`;
+    }
+
+    function downloadMergedZip() {
+      if (!finalMergedBlob) {
+        log('No merged archive ready for download.', 'error');
+        return;
+      }
+
+      const fileName = `playgta5_merged_web_build.zip`;
+      const url = URL.createObjectURL(finalMergedBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+
+      log(`Started download for ${fileName}`, 'success');
+    }
+
+    async function shareMergedZip() {
+      if (!finalMergedBlob) {
+        log('No merged archive ready for sharing.', 'error');
+        return;
+      }
+
+      const fileName = `playgta5_merged_web_build.zip`;
+      const file = new File([finalMergedBlob], fileName, { type: 'application/zip' });
+
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({
+            files: [file],
+            title: 'Merged GTA V Web Build Archive',
+            text: 'Unpacked and merged GTA V web build parts.'
+          });
+          log('Archive shared successfully via iOS Share Sheet.', 'success');
+        } catch (err) {
+          if (err.name !== 'AbortError') {
+            log(`Share error: ${err.message}`, 'error');
+          }
+        }
+      } else {
+        log('Web Share API for files is not supported on this browser. Downloading directly instead.', 'warn');
+        downloadMergedZip();
+      }
+    }
+  </script>
+</body>
+</html>
